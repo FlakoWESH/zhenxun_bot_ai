@@ -60,7 +60,7 @@ async def _(bot: Bot, event: MessageEvent):
         await ai.finish(hello())
     img = img[0] if img else ""
     if isinstance(event, GroupMessageEvent):
-        nickname = await GroupInfoUser.get_group_member_nickname(
+        nickname = await GroupInfoUser.get_user_nickname(
             event.user_id, event.group_id
         )
     else:

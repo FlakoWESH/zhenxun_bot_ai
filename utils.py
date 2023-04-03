@@ -86,7 +86,7 @@ class AiMessageManager(StaticData):
         if msg:
             if "[uname]" in msg:
                 msg = msg.replace("[uname]", nickname)
-            if not msg.startswith("生气了！你好烦，闭嘴！") and "[*]" in msg:
+            if not msg.startswith("生气了！你好烦，不要说话！") and "[*]" in msg:
                 msg = msg.replace("[*]", self._data[user_id]["message"][-1])
         return msg
 

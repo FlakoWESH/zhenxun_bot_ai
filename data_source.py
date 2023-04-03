@@ -13,7 +13,6 @@ try:
 except ModuleNotFoundError:
     import json
 
-
 url = "http://openapi.tuling123.com/openapi/api/v2"
 
 check_url = "https://v2.alapi.cn/api/censor/text"
@@ -23,7 +22,7 @@ index = 0
 anime_data = json.load(open(DATA_PATH / "anime.json", "r", encoding="utf8"))
 
 
-async def get_chat_result(text: str, img_url: str, user_id: int, nickname: str) -> str:
+async def get_chat_result(text: str, user_id: int, nickname: str) -> str:
     """
     获取 AI 返回值，顺序： 特殊回复 -> 图灵(已死) -> GPT-2 ->青云客
     :param text: 问题
@@ -67,59 +66,78 @@ async def get_chat_result(text: str, img_url: str, user_id: int, nickname: str) 
     return rst
 
 
+"""
 # 图灵接口
 async def tu_ling(text: str, img_url: str, user_id: int) -> str:
+    ""
+获取图灵接口的回复
+:param
+text: 问题
+:param
+img_url: 图片链接
+:param
+user_id: 用户id
+:return: 图灵回复
+""
+global index
+TL_KEY = Config.get_config("ai", "TL_KEY")
+req = None
+if not TL_KEY:
+    return ""
+try:
+    if text:
+        req = {
+            "perception": {
+                "inputText": {"text": text},
+                "selfInfo": {
+                    "location": {"city": "陨石坑", "province": "火星", "street": "第5坑位"}
+                },
+            },
+            "userInfo": {"apiKey": TL_KEY[index], "userId": str(user_id)},
+        }
+    elif img_url:
+        req = {
+            "reqType": 1,
+            "perception": {
+                "inputImage": {"url": img_url},
+                "selfInfo": {
+                    "location": {"city": "陨石坑", "province": "火星", "street": "第5坑位"}
+                },
+            },
+            "userInfo": {"apiKey": TL_KEY[index], "userId": str(user_id)},
+        }
+except IndexError:
+    index = 0
+    return ""
+text = ""
+response = await AsyncHttpx.post(url, json=req)
+if response.status_code != 200:
+    return no_result()
+resp_payload = json.loads(response.text)
+if int(resp_payload["intent"]["code"]) in [4003]:
+    return ""
+if resp_payload["results"]:
+    for result in resp_payload["results"]:
+        if result["resultType"] == "text":
+            text = result["values"]["text"]
+            if "请求次数超过" in text:
+                text = ""
+return text
+"""
+
+
+# 本地GPT2
+async def GTP2(text: str) -> str:
     """
-    获取图灵接口的回复
+    本地GPT-2模型回复
     :param text: 问题
-    :param img_url: 图片链接
-    :param user_id: 用户id
-    :return: 图灵回复
+    :return: 回复
     """
-    global index
-    TL_KEY = Config.get_config("ai", "TL_KEY")
-    req = None
-    if not TL_KEY:
-        return ""
     try:
-        if text:
-            req = {
-                "perception": {
-                    "inputText": {"text": text},
-                    "selfInfo": {
-                        "location": {"city": "陨石坑", "province": "火星", "street": "第5坑位"}
-                    },
-                },
-                "userInfo": {"apiKey": TL_KEY[index], "userId": str(user_id)},
-            }
-        elif img_url:
-            req = {
-                "reqType": 1,
-                "perception": {
-                    "inputImage": {"url": img_url},
-                    "selfInfo": {
-                        "location": {"city": "陨石坑", "province": "火星", "street": "第5坑位"}
-                    },
-                },
-                "userInfo": {"apiKey": TL_KEY[index], "userId": str(user_id)},
-            }
-    except IndexError:
-        index = 0
-        return ""
-    text = ""
-    response = await AsyncHttpx.post(url, json=req)
-    if response.status_code != 200:
-        return no_result()
-    resp_payload = json.loads(response.text)
-    if int(resp_payload["intent"]["code"]) in [4003]:
-        return ""
-    if resp_payload["results"]:
-        for result in resp_payload["results"]:
-            if result["resultType"] == "text":
-                text = result["values"]["text"]
-                if "请求次数超过" in text:
-                    text = ""
-    return text
+        res = (await AsyncHttpx.get(f'http://127.0.0.1:5000/?key_word={text}')).text
+        return res
+    except Exception:
+        return ''
 
 
 # 屑 AI
@@ -145,7 +163,7 @@ async def xie_ai(text: str) -> str:
                 content = content.replace("{br}", "\n")
             if "提示" in content:
                 content = content[: content.find("提示")]
-            if "淘宝" in content or "taobao.com" in content:
+            if "淘宝" in content or "taobao.com" or "抱歉，没能为您" in content:
                 return ""
             while True:
                 r = re.search("{face:(.*)}", content)
@@ -193,16 +211,16 @@ def no_result() -> str:
     没有回答时的回复
     """
     return (
-        random.choice(
-            [
-                "你在说啥子？",
-                f"纯洁的{NICKNAME}没听懂",
-                "下次再告诉你(下次一定)",
-                "你觉得我听懂了吗？嗯？",
-                "我！不！知！道！",
-            ]
-        )
-        + image(random.choice(os.listdir(IMAGE_PATH / "noresult")), "noresult")
+            random.choice(
+                [
+                    "你在说啥子？",
+                    f"纯洁的{NICKNAME}没听懂",
+                    "下次再告诉你(下次一定)",
+                    "你觉得我听懂了吗？嗯？",
+                    "我！不！知！道！",
+                ]
+            )
+            + image(random.choice(os.listdir(IMAGE_PATH / "noresult")), "noresult")
     )
 
 
@@ -222,16 +240,3 @@ async def check_text(text: str) -> str:
     except Exception as e:
         logger.error(f"检测违规文本错误...{type(e)}：{e}")
     return text
-
-
-async def GTP2(text:str) -> str:
-    """
-    本地GPT-2模型回复
-    :param text: 问题
-    :return: 回复
-    """
-    try:
-        res = (await AsyncHttpx.get(f'http://127.0.0.1:5000/?key_word={text}')).text
-        return res
-    except Exception :
-        return ''
